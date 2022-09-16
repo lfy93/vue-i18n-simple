@@ -35,7 +35,7 @@ class ExtractProvider extends Extract {
         arguments: [
           {
             ...params,
-            keyReplace: this.keyReplace(`$t('key')`)
+            keyReplace: this.keyReplace(`$t('{key}')`)
           }
         ]
       },

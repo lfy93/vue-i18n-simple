@@ -52,7 +52,7 @@ export const delI18nCommand = () => {
 
       // 删除
       lngTransData.text = ''
-      await i18n.writeI18n(transData)
+      i18n.writeI18n(transData)
 
       const recoverText = '恢复'
       const result = await vscode.window.showInformationMessage(
@@ -68,7 +68,7 @@ export const delI18nCommand = () => {
           lng
         )
         lngTransData.text = text
-        await i18n.writeI18n(transData)
+        i18n.writeI18n(transData)
       }
     }
   )

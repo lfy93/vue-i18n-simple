@@ -2,7 +2,7 @@
   "name": "vue-i18n-simple",
   "displayName": "Vue i18n simple",
   "description": "🔖 内测版本，请勿使用！",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "publisher": "lfy93",
   "scripts": {
     "preinstall": "git submodule update --init --recursive",

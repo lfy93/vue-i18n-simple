@@ -73,13 +73,19 @@ const onExtract = async ({
   }
 
   // 翻译内容
-  let transData = i18n.getI18n(key, MatchMode.WRITE)
+  let transData = i18n.getI18n(key, MatchMode.ADD)
   const mainTrans = transData.find(item => item.lng === Config.sourceLocale)
-
+  const selectPath = mainTrans.selectWriteI18nPath ? await mainTrans.selectWriteI18nPath() : ''
+  if (selectPath) {
+    transData.forEach(item => {
+      item.filepath = selectPath
+    })
+  }
   mainTrans.text = text
   transData = await i18n.transI18n(transData)
   // 写入翻译
   i18n.writeI18n(transData, MatchMode.ADD)
+  mainTrans.selectWriteI18nPath = null
 }
 
 export const extract = () => {
