@@ -37,6 +37,7 @@ export abstract class Annotation {
   }
 
   update() {
+    
     const activeTextEditor = vscode.window.activeTextEditor
     if (!activeTextEditor) {
       return

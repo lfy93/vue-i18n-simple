@@ -1,5 +1,4 @@
 import * as vscode from 'vscode'
-
 import meta from '../meta'
 import { i18nFile } from '../i18nFile'
 import Config from '../Config'
@@ -60,7 +59,6 @@ const onFindI18n = async ({
     } ))
     quickPick.show();
     quickPick.onDidTriggerItemButton(selectBtnInfo=>{
-        console.log({selectBtnInfo});
         // 替换内容
         vscode.window.activeTextEditor.edit(editBuilder => {
             const { start, end } = vscode.window.activeTextEditor.selection

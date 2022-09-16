@@ -1,7 +1,7 @@
 import * as vscode from 'vscode'
 import * as path from 'path'
 import { google, baidu, youdao } from 'translation.js'
-import { get, set, omit, isEmpty } from 'lodash'
+import { get, set, omit, isEmpty, reject } from 'lodash'
 import * as fg from 'fast-glob'
 import * as YAML from 'yaml'
 import * as fs from 'fs'
@@ -23,7 +23,8 @@ export interface ITransData extends ILng {
   id: string
   keypath: string
   key: string
-  text: any
+  text: any,
+  selectWriteI18nPath?:any
 }
 
 export enum StructureType {
@@ -89,7 +90,7 @@ export class I18nItem {
 
     const updateFile = (type, { fsPath: filepath }) => {
       console.log({ type, filepath }, '监听--');
-      
+      return
       const { ext } = path.parse(filepath)
       if (![FILE_EXT.JSON, FILE_EXT.YAML, FILE_EXT.Js].includes(ext)) {
         return
@@ -249,33 +250,9 @@ export class I18nItem {
   }
 
   async overrideCheck(keypath): Promise<boolean> {
-    let [{ text }] = this.getI18n(keypath)
+    let [{ text }] = this.getI18n(keypath, MatchMode.FIND)
     // 检测尾 key
     let overrideKey = text ? keypath : undefined
-
-    if (!overrideKey) {
-      let tempKeypath = keypath.split('.')
-
-      // 向前检测 key
-      while (tempKeypath.length) {
-        tempKeypath.pop()
-
-        const tempOverrideKey = tempKeypath.join('.')
-        const [{ text: tempText }] = this.getI18n(tempOverrideKey)
-
-        if (
-          typeof tempText === 'object' ||
-          typeof tempText === 'undefined' ||
-          tempText === 'undefined'
-        ) {
-          continue
-        } else {
-          overrideKey = tempOverrideKey
-          text = tempText
-          break
-        }
-      }
-    }
 
     if (!overrideKey) {
       return true
@@ -324,8 +301,7 @@ export class I18nItem {
     })
   }
 
-  getI18n(key: string, mode:MatchMode = MatchMode.READ): ITransData[] {
-    // if(!key) return
+  getI18n(key: string, mode: MatchMode = MatchMode.READ): ITransData[] {
     let transData = this.getFileI18n(key, mode)
 
     // 尝试使用 common 配置
@@ -336,36 +312,27 @@ export class I18nItem {
     return transData
   }
 
-  getFileI18n(key: string,  mode:MatchMode = MatchMode.READ): ITransData[] {
+  getFileI18n(key: string, mode: MatchMode = MatchMode.READ): ITransData[]  {
     return this.lngs.map((lngItem) => {
       let i18nFilepath = lngItem.filepath
       let keypath = key
       let kabekCaseFilename
-      let useCache
+      let file
+      let selectWriteI18nPath
       if (this.structureType === StructureType.DIR) {
         const [filename, ...realpath] = key.split('.')
         kabekCaseFilename = Utils.camelToKabeb(filename)
-         this.parseFilepath(i18nFilepath, filename, mode)
-        console.log(this.parseFilepath(i18nFilepath, filename, mode),1111);
-        
-        if(mode === MatchMode.FIND) {
-          i18nFilepath = path.join(i18nFilepath, `index${this.fileExt}`)
-          useCache = false
-        } else {
-          i18nFilepath = !!filename ? path.join(i18nFilepath, `${filename}\\${filename}${this.fileExt}`) : i18nFilepath
-          useCache = true
-        }
         keypath = realpath.join('.')
+        // 读取文件
+        const fileInfo = this.getFileToPath(i18nFilepath, filename, keypath, mode)
+        i18nFilepath = fileInfo.i18nFilepath
+        file = fileInfo.file
+        selectWriteI18nPath = fileInfo.selectWriteI18nPath
+      } else {
+        file = this.readFile(i18nFilepath, true)
       }
-      
-      // 读取文件
-      let file
-      try {
-        file = fs.lstatSync(i18nFilepath)?.isFile() ? this.readFile(i18nFilepath, useCache) : {}
-      } catch (error) {
-        Log.error(error)
-        file = {}
-      }
+      console.log({ file, keypath, key, i18nFilepath })
+     
       // 尝试读取短横线命名格式的文件
       if (isEmpty(file) && Config.filenameToKebabCase && mode === MatchMode.READ) {
         i18nFilepath = path.join(
@@ -381,37 +348,79 @@ export class I18nItem {
         keypath,
         filepath: i18nFilepath,
         text: keypath ? get(file, keypath) : file,
+        selectWriteI18nPath
       }
     })
   }
 
-  parseFilepath(i18nFilepath, filename, mode) {
+  getFileToPath(filePath, filename, keypath ,mode) {
     try {
-      const pattern = `${i18nFilepath}\\${filename}/*${this.fileExt}`
-      let result:Array<string> = []
-      let parsePath:string
-      const defaultPath = path.join(i18nFilepath, `${filename ? filename + '\\' : ''}index${this.fileExt}`)
+      const pattern = `${filePath}\\${filename}/*${this.fileExt}`
+      let result:Array<any> = []
+      let file
+      let i18nFilepath
+      let selectWriteI18nPath
+      const defaultPath = path.join(filePath, `${filename ? filename + '\\' : ''}index${this.fileExt}`)
       result = fg.sync(pattern, {
         onlyFiles: true
       })
-      console.log(result)
-      if(result.length <= 1) {
-        return result[0] || defaultPath
-      }
-      if(mode === MatchMode.FIND) {
-        parsePath = defaultPath
+
+      if (mode === MatchMode.FIND) {
+        i18nFilepath = defaultPath
+        file = this.readFile(defaultPath, true)
+      } else if (mode === MatchMode.ADD) {
+        // 新增确定路径逻辑
+        const path = this.findAllI18n(result, keypath)
+        if (!path.i18nFilepath && result.length === 1) {
+          i18nFilepath = result[0]
+        } else {
+          selectWriteI18nPath = this.selectWriteI18nPath(result)
+        }
       } else {
-        parsePath = result.find(item => item.indexOf(filename + this.fileExt) > -1) || result.find(item => item.indexOf('index' + this.fileExt) === -1) || i18nFilepath
+        const i18nItem = this.findAllI18n(result, keypath)
+        i18nFilepath = i18nItem.i18nFilepath
+        file = i18nItem.file
       }
-      return parsePath
+      
+      return { i18nFilepath: i18nFilepath || filePath, file: file || {}, selectWriteI18nPath }
     } catch (error) {
-      console.log(error)
-      return ''
+      Log.error(error)
+      return { i18nFilepath: filePath, file: {} }
     }
     
   }
 
-  async writeI18n(transData: ITransData[], mode: MatchMode = MatchMode.WRITE): Promise<any> {
+  findAllI18n(result, keypath){
+    const index = result.findIndex(item => item.indexOf(`index${this.fileExt}`) > -1)
+    const indexFilePath = index > -1 ? result.splice(index, 1) : []
+    let file,i18nFilepath
+    if (result.length > 0) {
+      for (let i = 0; i < result.length; i++) {
+        const item = result[i];
+        file = this.readFile(item, true)
+        if (keypath in file) {
+          i18nFilepath = item
+          break
+        }
+      }
+    } else {
+      file = this.readFile(indexFilePath[0], true)
+      i18nFilepath = indexFilePath[0]
+    }
+    return {i18nFilepath, file}
+  }
+
+  selectWriteI18nPath(result) {
+    const paths = result
+    return function () {
+      return vscode.window.showQuickPick(paths, {
+        placeHolder: '请选择你要写入的文件',
+        // onDidSelectItem: item => i18nFilepath = item
+      })
+    }
+  }
+
+  writeI18n(transData: ITransData[], mode: MatchMode = MatchMode.WRITE): Promise<any> {
     const writePromise = transData.map(({ filepath, keypath, text }) => {
       return new Promise((resolve, reject) => {
         const file = this.readFile(filepath, true)
