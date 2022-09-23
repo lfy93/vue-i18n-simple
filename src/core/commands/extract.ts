@@ -78,7 +78,8 @@ const onExtract = async ({
   const selectPath = mainTrans.selectWriteI18nPath ? await mainTrans.selectWriteI18nPath() : ''
   if (selectPath) {
     transData.forEach(item => {
-      item.filepath = selectPath
+      item.filepath = selectPath.replace(`/${mainTrans.originLng}/`, `/${item.originLng}/`)
+      item.isDirectory = false
     })
   }
   mainTrans.text = text
